@@ -3,24 +3,28 @@
 //_\SV
    // Include Tiny Tapeout Lab.
    // Included URL: "https://raw.githubusercontent.com/os-fpga/Virtual-FPGA-Lab/62d6e18bc3d0ca8af451ccaff6d63974a69e645b/tlv_lib/tiny_tapeout_lib.tlv"// Included URL: "https://raw.githubusercontent.com/os-fpga/Virtual-FPGA-Lab/b31497efd986ebf6cab7da96d34b2b923a475950/tlv_lib/fpga_includes.tlv"
-//_\source project.tlv 55
+//_\source project.tlv 132
 //_\SV
 
 
 // ================================================
-// A simple Makerchip Verilog test bench driving random stimulus.
-// Modify the module contents to your needs.
+// Makerchip test bench: flies a few seeds and checks each landing
+// (step count, and the peak altitude on the 7-segment display with the decimal point).
 // ================================================
 
 module top(input logic clk, input logic reset, input logic [31:0] cyc_cnt, output logic passed, output logic failed);
    // Tiny tapeout I/O signals.
    logic [7:0] ui_in, uio_in, uo_out, uio_out, uio_oe;
-   logic [31:0] r;
-   always @(posedge clk) r = 0;
-   assign ui_in = r[7:0];
-   assign uio_in = r[15:8];
-   logic ena = 1'b0;
-   logic rst_n = ! reset;
+   logic ena = 1'b1;
+   wire rst_n = ! reset;
+
+   // A new seed every 128 cycles: 27 (111 steps, peak 9232: altitude d), 7 (16 steps, peak 52: altitude 5),
+   // and 0, meaning 256 (8 steps, peak 256: altitude 8).
+   wire [1:0] phase = cyc_cnt[8:7];
+   assign ui_in = (phase == 2'd0) ? 8'd27 : (phase == 2'd1) ? 8'd7 : 8'd0;
+   assign uio_in = 8'b0;
+   wire [7:0] exp_steps = (phase == 2'd0) ? 8'd111 : (phase == 2'd1) ? 8'd16 : 8'd8;
+   wire [7:0] exp_uo    = (phase == 2'd0) ? 8'hDE  : (phase == 2'd1) ? 8'hED : 8'hFF;  // dp + 'd', '5', '8'
 
    /*
    // Or, to provide specific inputs at specific times...
@@ -37,10 +41,12 @@ module top(input logic clk, input logic reset, input logic [31:0] cyc_cnt, outpu
    */
 
    // Instantiate the Tiny Tapeout module.
-   tt_um_example tt(.*);
+   tt_um_stevehoover_hailstone tt(.*);
 
-   assign passed = cyc_cnt > 100;
-   assign failed = 1'b0;
+   // Check each landing at the end of its phase.
+   wire check = (cyc_cnt[6:0] == 7'd127) && (phase != 2'd3);
+   assign passed = cyc_cnt > 3 * 128;
+   assign failed = check && ((uio_out != exp_steps) || (uo_out != exp_uo) || (uio_oe != 8'hFF));
 endmodule
 
 // Provide a wrapper module to debounce input signals if requested.
@@ -52,7 +58,7 @@ endmodule
 
 
 // The Tiny Tapeout module.
-module tt_um_example (
+module tt_um_stevehoover_hailstone (
     input  wire [7:0] ui_in,    // Dedicated inputs - connected to the input switches
     output wire [7:0] uo_out,   // Dedicated outputs - connected to the 7 segment display
     input  wire [7:0] uio_in,   // IOs: Bidirectional Input path
@@ -80,19 +86,178 @@ module tt_um_example (
 
 
 
+//
+// Scope: |hail
+//
+
+// For |hail$alt.
+logic [3:0] HAIL_alt_a1;
+
+// For |hail$digit.
+logic [3:0] HAIL_digit_a1;
+
+// For |hail$landed.
+logic HAIL_landed_a1,
+      HAIL_landed_a2;
+
+// For |hail$next.
+logic [15:0] HAIL_next_a1,
+             HAIL_next_a2;
+
+// For |hail$peak_alt.
+logic [3:0] HAIL_peak_alt_a1,
+            HAIL_peak_alt_a2;
+
+// For |hail$reload.
+logic HAIL_reload_a1;
+
+// For |hail$reset.
+logic HAIL_reset_a1;
+
+// For |hail$seed.
+logic [8:0] HAIL_seed_a1;
+
+// For |hail$segs.
+logic [6:0] HAIL_segs_a1,
+            HAIL_segs_a2;
+
+// For |hail$steps.
+logic [7:0] HAIL_steps_a1,
+            HAIL_steps_a2;
+
+// For |hail$ui.
+logic [7:0] HAIL_ui_a1,
+            HAIL_ui_a2;
+
+// For |hail$value.
+logic [15:0] HAIL_value_a1;
+
+
+
+   //
+   // Scope: |hail
+   //
+
+      // Staging of $landed.
+      always_ff @(posedge clk) HAIL_landed_a2 <= HAIL_landed_a1;
+
+      // Staging of $next.
+      always_ff @(posedge clk) HAIL_next_a2[15:0] <= HAIL_next_a1[15:0];
+
+      // Staging of $peak_alt.
+      always_ff @(posedge clk) HAIL_peak_alt_a2[3:0] <= HAIL_peak_alt_a1[3:0];
+
+      // Staging of $segs.
+      always_ff @(posedge clk) HAIL_segs_a2[6:0] <= HAIL_segs_a1[6:0];
+
+      // Staging of $steps.
+      always_ff @(posedge clk) HAIL_steps_a2[7:0] <= HAIL_steps_a1[7:0];
+
+      // Staging of $ui.
+      always_ff @(posedge clk) HAIL_ui_a2[7:0] <= HAIL_ui_a1[7:0];
+
+
+
+
+
+
+//
+// Debug Signals
+//
+
+   if (1) begin : DEBUG_SIGS_GTKWAVE
+
+
+      //
+      // Scope: |hail
+      //
+      if (1) begin : P_hail
+         (* keep *) logic [3:0] \@1$alt ;
+         assign \@1$alt = HAIL_alt_a1;
+         (* keep *) logic [3:0] \@1$digit ;
+         assign \@1$digit = HAIL_digit_a1;
+         (* keep *) logic  \@1$landed ;
+         assign \@1$landed = HAIL_landed_a1;
+         (* keep *) logic [15:0] \@1$next ;
+         assign \@1$next = HAIL_next_a1;
+         (* keep *) logic [3:0] \@1$peak_alt ;
+         assign \@1$peak_alt = HAIL_peak_alt_a1;
+         (* keep *) logic  \@1$reload ;
+         assign \@1$reload = HAIL_reload_a1;
+         (* keep *) logic  \@1$reset ;
+         assign \@1$reset = HAIL_reset_a1;
+         (* keep *) logic [8:0] \@1$seed ;
+         assign \@1$seed = HAIL_seed_a1;
+         (* keep *) logic [6:0] \@1$segs ;
+         assign \@1$segs = HAIL_segs_a1;
+         (* keep *) logic [7:0] \@1$steps ;
+         assign \@1$steps = HAIL_steps_a1;
+         (* keep *) logic [7:0] \@1$ui ;
+         assign \@1$ui = HAIL_ui_a1;
+         (* keep *) logic [15:0] \@1$value ;
+         assign \@1$value = HAIL_value_a1;
+      end
+
+
+   end
+
 // ---------- Generated Code Ends ----------
 //_\TLV
-   //_\source project.tlv 32   // Instantiated from project.tlv, 121 as: m5+my_design.
+   //_\source project.tlv 32   // Instantiated from project.tlv, 204 as: m5+my_design.
    
       // ============================================
-      // If you are using TL-Verilog for your design,
-      // your TL-Verilog logic goes here.
-      // Optionally, provide \viz_js here (for TL-Verilog or Verilog logic).
-      // Tiny Tapeout inputs can be referenced as, e.g. *ui_in.
-      // (Connect Tiny Tapeout outputs at the end of this template.)
+      // Hailstone: a Collatz-sequence flight recorder.
+      //
+      // The input switches (*ui_in) give a seed (0 means 256). Each clock cycle, the value takes one
+      // Collatz step (n/2 if even, 3n+1 if odd) until it lands at 1. Changing the seed (or reset)
+      // launches a new flight.
+      //
+      // The 7-segment display shows the "altitude" (floor(log2(value))) as a hex digit in flight, and,
+      // once landed, the peak altitude of the flight, with the decimal point lit.
+      // *uio_out shows the step count.
       // ============================================
    
-      // ...
+      //_|hail
+         //_@1
+            assign HAIL_reset_a1 = reset;
+            assign HAIL_ui_a1[7:0] = ui_in;
+            assign HAIL_reload_a1 = HAIL_reset_a1 || (HAIL_ui_a1 != HAIL_ui_a2);
+            assign HAIL_seed_a1[8:0] = (HAIL_ui_a1 == 8'd0) ? 9'd256 : {1'b0, HAIL_ui_a1};
+   
+            // The flight. (Seeds up to 256 peak at 13120, so 16 bits suffice.)
+            assign HAIL_value_a1[15:0] = HAIL_reload_a1 ? {7'b0, HAIL_seed_a1} : HAIL_next_a2;
+            assign HAIL_landed_a1 = HAIL_value_a1 == 16'd1;
+            assign HAIL_next_a1[15:0] = HAIL_landed_a1  ? HAIL_value_a1 :
+                          HAIL_value_a1[0] ? HAIL_value_a1 + (HAIL_value_a1 << 1) + 16'd1 :
+                                      HAIL_value_a1 >> 1;
+            assign HAIL_steps_a1[7:0] = HAIL_reload_a1     ? 8'd0 :
+                          HAIL_landed_a2  ? HAIL_steps_a2 :
+                                        HAIL_steps_a2 + 8'd1;
+   
+            // Altitude: the index of the most-significant 1.
+            /*SV_plus*/
+               always_comb begin
+                  HAIL_alt_a1[3:0] = 4'd0;
+                  for (int i = 1; i < 16; i++)
+                     if (HAIL_value_a1[i]) HAIL_alt_a1 = i[3:0];
+               end
+            assign HAIL_peak_alt_a1[3:0] = (HAIL_reload_a1 || (HAIL_alt_a1 > HAIL_peak_alt_a2)) ? HAIL_alt_a1 : HAIL_peak_alt_a2;
+   
+            // 7-segment hex digit (gfedcba).
+            assign HAIL_digit_a1[3:0] = HAIL_landed_a1 ? HAIL_peak_alt_a1 : HAIL_alt_a1;
+            assign HAIL_segs_a1[6:0] =
+               (HAIL_digit_a1 == 4'h0) ? 7'h3F : (HAIL_digit_a1 == 4'h1) ? 7'h06 : (HAIL_digit_a1 == 4'h2) ? 7'h5B : (HAIL_digit_a1 == 4'h3) ? 7'h4F :
+               (HAIL_digit_a1 == 4'h4) ? 7'h66 : (HAIL_digit_a1 == 4'h5) ? 7'h6D : (HAIL_digit_a1 == 4'h6) ? 7'h7D : (HAIL_digit_a1 == 4'h7) ? 7'h07 :
+               (HAIL_digit_a1 == 4'h8) ? 7'h7F : (HAIL_digit_a1 == 4'h9) ? 7'h6F : (HAIL_digit_a1 == 4'hA) ? 7'h77 : (HAIL_digit_a1 == 4'hB) ? 7'h7C :
+               (HAIL_digit_a1 == 4'hC) ? 7'h39 : (HAIL_digit_a1 == 4'hD) ? 7'h5E : (HAIL_digit_a1 == 4'hE) ? 7'h79 :                   7'h71;
+   
+            // Flight plot: log2(value) over the last 128 cycles; the current flight is bright.
+            
+         //_@2
+            // Registered outputs.
+            assign uo_out = {HAIL_landed_a2, HAIL_segs_a2};
+            assign uio_out = HAIL_steps_a2;
+            assign uio_oe = 8'hFF;
    //_\end_source
 
 /*SV_plus*/
@@ -108,9 +273,7 @@ module tt_um_example (
    // Connect Tiny Tapeout outputs.
    // Note that my_design will be under /fpga_pins/fpga if 0.
    // Example *uo_out = /fpga_pins/fpga|my_pipe>>3$uo_out;
-   assign uo_out = 8'b0;  // Avoid unused inputs.
-   assign uio_out = 8'b0;
-   assign uio_oe = 8'b0;
+   // (Hailstone drives its outputs in \TLV my_design().)
 
 endmodule
 
