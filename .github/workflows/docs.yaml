@@ -1,0 +1,23 @@
+name: docs
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Read the PDK from info.yaml
+        id: pdk
+        run: echo "pdk=$(yq -r '.project.pdk // "sky130A"' info.yaml)" >> "$GITHUB_OUTPUT"
+
+      - name: Build docs
+        uses: TinyTapeout/tt-gds-action/docs@d4783dbe16287f6e367949a5ca93d47015283adc  # See UPSTREAM.md.
+        with:
+          pdk: ${{ steps.pdk.outputs.pdk }}

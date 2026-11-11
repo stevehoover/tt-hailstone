@@ -1,0 +1,51 @@
+name: gds
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  gds:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Read the PDK from info.yaml
+        id: pdk
+        run: echo "pdk=$(yq -r '.project.pdk // "sky130A"' info.yaml)" >> "$GITHUB_OUTPUT"
+
+      - name: Build GDS
+        uses: TinyTapeout/tt-gds-action@d4783dbe16287f6e367949a5ca93d47015283adc  # See UPSTREAM.md.
+        with:
+          pdk: ${{ steps.pdk.outputs.pdk }}
+
+  precheck:
+    needs: gds
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Run Tiny Tapeout Precheck
+        uses: TinyTapeout/tt-gds-action/precheck@d4783dbe16287f6e367949a5ca93d47015283adc  # See UPSTREAM.md.
+
+  gl_test:
+    needs: gds
+    runs-on: ubuntu-24.04
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: GL test
+        uses: TinyTapeout/tt-gds-action/gl_test@d4783dbe16287f6e367949a5ca93d47015283adc  # See UPSTREAM.md.
+
+  viewer:
+    needs: gds
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
+    steps:
+      - uses: TinyTapeout/tt-gds-action/viewer@d4783dbe16287f6e367949a5ca93d47015283adc  # See UPSTREAM.md.
